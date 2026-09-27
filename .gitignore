@@ -1,0 +1,24 @@
+# Secrets: never commit real env files
+.env
+.env.*
+!.env.example
+
+# Dependencies / build
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
+# Local AI tooling (kept on disk, not in the repo)
+.claude/settings.local.json
