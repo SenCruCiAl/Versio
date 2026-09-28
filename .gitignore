@@ -21,4 +21,4 @@ Thumbs.db
 *.log
 
 # Local AI tooling (kept on disk, not in the repo)
-.claude/settings.local.json
+.claude/
