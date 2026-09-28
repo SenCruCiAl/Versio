@@ -49,11 +49,13 @@ function fail(message) {
  */
 function readStatusEnv() {
   try {
-    const out = execFileSync("npx", ["supabase", "status", "-o", "env"], {
+    // shell: Windows can only launch npx (a .cmd shim) through a shell.
+    const out = execFileSync("npx supabase status -o env", {
       cwd: repoRoot,
       encoding: "utf8",
+      shell: true,
       stdio: ["ignore", "pipe", "ignore"],
-      timeout: 15_000,
+      timeout: 30_000,
     });
     /** @type {Record<string, string>} */
     const vars = {};

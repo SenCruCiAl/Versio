@@ -323,6 +323,18 @@ PRD Phase 3 criterion = B5 + B6 + B7 as one scripted test with two real supabase
 
 ---
 
+### B0 check results (2026-09-28, local Supabase on Docker 29.8.1, Postgres 17.6)
+
+| # | Check | Result |
+|---|---|---|
+| 1 | R2 enforces presigned `x-amz-checksum-sha256` | Not run yet: R2 bucket/token not created (`npm run spike:r2` exits 2, SKIPPED) |
+| 2 | `staging/` lifecycle via API | Not run yet (same). Fallback: set the rule in the dashboard (`docs/r2-setup.md`) |
+| 3 | CopyObject staging → objects + HEAD | Not run yet (same) |
+| 4 | `getClaims()` verifies locally with asymmetric keys | **PASS**: 0 requests to `/auth/v1/user`, 1 JWKS fetch, `alg=ES256` |
+| 5 | Private-channel `realtime.send()` | **PASS**: private message written to `realtime.messages` (live delivery tested in B7) |
+
+---
+
 ## 10. Open questions
 
 1. **License options:** proposed CC BY, CC BY-SA, CC BY-NC, MIT (code), All rights reserved (copy disabled).

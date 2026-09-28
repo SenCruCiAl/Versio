@@ -24,7 +24,7 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 
 ---
 
-## Step 1: B0 setup and checks (code done; live checks waiting on owner prerequisites)
+## Step 1: B0 setup and checks (checks 4–5 pass; R2 checks 1–3 waiting on bucket credentials)
 
 **Goal:** local Supabase running, R2 bucket ready, and the five risky assumptions checked before any real code depends on them.
 
@@ -40,11 +40,12 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 | `scripts/spike/broadcast.sql` | main | check 5: `realtime.send()` to a private channel |
 
 **Verified now:** `npm run typecheck` clean; `node --check` on all scripts; both spikes exit 2 (SKIPPED) with no credentials, printing only missing variable names.
-**Still to run (owner):** Docker Desktop + WSL2 → `npm run db:start`; R2 bucket and token per `docs/r2-setup.md` → `npm run r2:config`, `npm run spike:r2`; then `npm run spike:auth` and `scripts/spike/broadcast.sql`. Results go into `BACKEND_PLAN.md` §9.
+**Ran 2026-09-28 (Docker + local Supabase):** `spike:auth` PASS (0 `/auth/v1/user` calls, 1 JWKS fetch, ES256); `broadcast.sql` PASS. Results in `BACKEND_PLAN.md` §9.
+**Still to run (owner):** R2 bucket and token per `docs/r2-setup.md`, then `npm run r2:config` and `npm run spike:r2` (checks 1–3).
 
 ---
 
-## Step 2: B1 auth (code done; live checks waiting on Docker and OAuth apps)
+## Step 2: B1 auth (email auth verified; Google/GitHub waiting on OAuth apps)
 
 | File | Who | Change |
 |---|---|---|
@@ -60,7 +61,8 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 | `tests/auth.test.mjs` | upload-dev | 6 unit tests (`npm test`) |
 
 **Verified now:** `npm test` 6/6 pass; migrations applied to an in-memory Postgres (PGlite with a stub `auth` schema): trigger creates one profile, `set_username` accepts/lower-cases valid names, rejects short/invalid/duplicate names, direct UPDATE/INSERT denied, anon cannot call the RPC but can read profiles.
-**Still to run (owner):** `npm run db:reset && npm run db:test` on local Supabase; GitHub and Google OAuth apps (callback `http://127.0.0.1:54321/auth/v1/callback`), IDs/secrets in `supabase/.env`, set `enabled = true`; sign in once with each provider and confirm exactly one profile each.
+**Ran 2026-09-28:** `db:reset` applied all migrations; `db:test` 12/12 pgTAP pass; real email signup through Supabase Auth → exactly 1 profile, `set_username` works via the API, direct profile UPDATE denied (42501), deleting the user removes the profile.
+**Still to run (owner):** GitHub and Google OAuth apps (callback `http://127.0.0.1:54321/auth/v1/callback`), IDs/secrets in `supabase/.env`, set `enabled = true`; sign in once with each provider and confirm exactly one profile each.
 **Frontend needs:** pages for `/auth/auth-error` and username onboarding.
 
 ---
