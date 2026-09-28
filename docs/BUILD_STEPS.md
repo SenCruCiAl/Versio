@@ -12,7 +12,7 @@ Living guide for building the backend described in [`BACKEND_PLAN.md`](../BACKEN
 
 ---
 
-## Step 0: Repo setup and plan (done, `cf847e9`)
+## Step 0: Repo setup and plan (done, `228c46f`)
 
 | Who | What |
 |---|---|
