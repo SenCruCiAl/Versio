@@ -24,32 +24,44 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 
 ---
 
-## Step 1: B0 setup and checks (pending)
+## Step 1: B0 setup and checks (code done; live checks waiting on owner prerequisites)
 
 **Goal:** local Supabase running, R2 bucket ready, and the five risky assumptions checked before any real code depends on them.
-**Owner:** storage-dev (R2 checks, R2 setup doc) + main session. upload-dev does not run.
-**Owner prerequisites:** Docker Desktop, Supabase CLI, R2 bucket `versio-dev` + API token scoped to it, keys in `.env.local`.
 
 | File | Who | Change |
 |---|---|---|
-| `package.json` | main | private, `"type":"module"`; `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, `@supabase/supabase-js`; scripts `spike:r2`, `spike:auth` |
-| `supabase/config.toml`, `supabase/seed.sql` | main | from `supabase init` (no secrets) |
-| `scripts/spike/r2.mjs` | storage-dev | (1) signed checksum: wrong bytes fail, right bytes pass; (2) CopyObject staging → objects + HEAD; (3) `staging/` 1-day lifecycle set via API and read back; (4) presigned GET stable within the hour |
-| `scripts/spike/auth.mjs` | main | `getClaims()` verifies locally with no Auth network call |
-| `scripts/spike/broadcast.sql` | main | `realtime.send()` to a private channel |
-| `docs/r2-setup.md` | storage-dev | bucket, scoped token, CORS (PUT/GET + checksum header), lifecycle |
-| `BACKEND_PLAN.md` §9 | main | results; fallback for any failing check |
+| `package.json` | main | private, ES modules; AWS S3 SDK + presigner, supabase-js, @supabase/ssr, next 16, react 19, zod, server-only; dev: supabase CLI, typescript, @types/node. Scripts `spike:r2`, `spike:auth`, `r2:config`, `db:*`, `test`, `typecheck` |
+| `supabase/config.toml` | main | `supabase init`; email confirmations on, 8-char passwords (letters+digits), local callback URLs, ES256 signing keys (`supabase/signing_keys.json`, git-ignored), GitHub/Google providers reading `env(...)` (disabled until keys exist) |
+| `jsconfig.json` | main | TypeScript 7: dropped `baseUrl`, added `types: ["node"]` |
+| `scripts/spike/r2.mjs` | storage-dev | checks 1–4: signed checksum (wrong bytes rejected, right bytes accepted), CopyObject staging → objects + HEAD (missing source fails), `staging/` lifecycle set and read back, presigned GET stable within the hour and downloadable. Cleans up; exits 2 if credentials are missing; never prints secrets or signed query strings |
+| `scripts/r2-apply-config.mjs` | storage-dev | idempotent lifecycle + CORS apply and read-back (`npm run r2:config`) |
+| `docs/r2-setup.md` | storage-dev | bucket, scoped token, env names, dashboard fallback |
+| `scripts/spike/auth.mjs` | upload-dev | check 4: `getClaims()` makes no `/auth/v1/user` call (at most one JWKS fetch) and the token is ES256 |
+| `scripts/spike/broadcast.sql` | main | check 5: `realtime.send()` to a private channel |
 
-**Done when:** all five checks report pass/fail with output shown to the owner; fallbacks recorded; `.env.local` untracked; secret scan clean.
+**Verified now:** `npm run typecheck` clean; `node --check` on all scripts; both spikes exit 2 (SKIPPED) with no credentials, printing only missing variable names.
+**Still to run (owner):** Docker Desktop + WSL2 → `npm run db:start`; R2 bucket and token per `docs/r2-setup.md` → `npm run r2:config`, `npm run spike:r2`; then `npm run spike:auth` and `scripts/spike/broadcast.sql`. Results go into `BACKEND_PLAN.md` §9.
 
 ---
 
-## Step 2: B1 auth (pending)
+## Step 2: B1 auth (code done; live checks waiting on Docker and OAuth apps)
 
-**Owner:** main session.
-**Owner prerequisites:** Google and GitHub OAuth apps (client IDs/secrets into `.env.local` / Supabase dashboard).
-**Files:** `lib/supabase/server.js`, `lib/supabase/admin.js`, `middleware.js` (narrow matcher), `supabase/migrations/0004_auth_trigger.sql`, `set_username` RPC.
-**Done when:** each provider creates exactly one profile; server actions reject calls without valid claims.
+| File | Who | Change |
+|---|---|---|
+| `supabase/migrations/0001_schema.sql` | main | `profiles` (B2 extends this file) |
+| `supabase/migrations/0002_rls.sql` | main | profiles: RLS on, SELECT for all, writes revoked from anon/authenticated |
+| `supabase/migrations/0004_auth_trigger.sql` | main | `handle_new_user` trigger (one profile per auth user); `set_username` RPC (NOT_AUTHENTICATED / INVALID_USERNAME / USERNAME_TAKEN), authenticated only |
+| `supabase/tests/auth_profiles.test.sql` | main | pgTAP: 12 checks (profile on signup, name rules, case-insensitive uniqueness, no direct writes, anon blocked) |
+| `lib/supabase/server.js`, `claims.js` | upload-dev | per-request server client, `getClaims`, `requireUser()` → `{supabase, uid, claims}` or `UNAUTHENTICATED` |
+| `lib/supabase/admin.js`, `client.js` | upload-dev | service-role client (server-only); browser client |
+| `proxy.js` | upload-dev | Next 16 session refresh, narrow matcher |
+| `app/auth/callback/route.js` | upload-dev | code exchange, relative-only `next` redirect |
+| `app/actions/auth.js` | upload-dev | `setUsername`, `signInWithOAuth`, email sign-up/in, sign-out (zod). Redirect origin from `NEXT_PUBLIC_SITE_URL` when set |
+| `tests/auth.test.mjs` | upload-dev | 6 unit tests (`npm test`) |
+
+**Verified now:** `npm test` 6/6 pass; migrations applied to an in-memory Postgres (PGlite with a stub `auth` schema): trigger creates one profile, `set_username` accepts/lower-cases valid names, rejects short/invalid/duplicate names, direct UPDATE/INSERT denied, anon cannot call the RPC but can read profiles.
+**Still to run (owner):** `npm run db:reset && npm run db:test` on local Supabase; GitHub and Google OAuth apps (callback `http://127.0.0.1:54321/auth/v1/callback`), IDs/secrets in `supabase/.env`, set `enabled = true`; sign in once with each provider and confirm exactly one profile each.
+**Frontend needs:** pages for `/auth/auth-error` and username onboarding.
 
 ---
 
@@ -101,4 +113,5 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 
 | Date | From → To | Question / request | Resolution |
 |---|---|---|---|
-| | | | |
+| 2026-09-28 | storage-dev → upload-dev | `x-amz-checksum-sha256` is base64 of the raw SHA-256 digest, not hex (keys stay lowercase hex). The presigner hoists it into the URL query, so the browser must not set it again as a header. | Goes into `docs/storage-upload-contract.md` in Step 4 |
+| 2026-09-28 | upload-dev → main | `lib/supabase/admin.js` exports the cached service-role `createClient()` for `commit_version` and takedown cleanup | Noted for Steps 4 and 7 |
