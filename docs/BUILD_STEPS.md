@@ -79,6 +79,8 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 
 **Ran 2026-10-07:** `db:reset` clean; `db:test` **39/39**; `check:rls` **14/14**; `typecheck` clean; `npm test` 6/6.
 
+**Also done ahead of Steps 4–6 (database side only, same day):** `0003_rpc.sql` (projects, `commit_version`, restore, make_copy) and `0005_requests.sql` (requests, review, promote, notifications) with pgTAP `rpc_projects` (24) and `rpc_requests` (22). `db:test` **85/85**. Server actions, R2 integration, read functions and takedown are still to do; see `BACKEND_PLAN.md` "RPC results".
+
 ---
 
 ## Step 4: B3 storage and upload pipeline (pending)

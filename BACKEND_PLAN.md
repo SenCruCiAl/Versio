@@ -291,7 +291,8 @@ supabase/
   migrations/0002_rls.sql             policies + helpers
   migrations/0003_rpc.sql             write RPCs (§6)
   migrations/0004_auth_trigger.sql    profile-on-signup
-  migrations/0005_read_functions.sql  SECURITY INVOKER read functions
+  migrations/0005_requests.sql       submit/resubmit/review, promote, notify, mark_notifications_read
+  migrations/0006_read_functions.sql  SECURITY INVOKER read functions (not written yet)
   tests/*.sql                         pgTAP (`supabase test db`)
 lib/
   limits.js              all limits and URL lifetimes
@@ -345,6 +346,13 @@ PRD Phase 3 criterion = B5 + B6 + B7 as one scripted test with two real supabase
 - Migrations `0001_schema.sql` (all tables, enums, indexes) and `0002_rls.sql` (RLS on every table, writes revoked from `anon`/`authenticated`, default privileges revoked for future tables, `is_project_readable` / `is_copy_readable` helpers, `realtime.messages` policy for `user:<uid>`).
 - `supabase test db`: **39/39 pass** (12 auth + 27 schema/RLS).
 - `npm run check:rls` (real PostgREST, two real users): **14/14 pass**: B cannot insert into any of the 9 tables, cannot update or delete A's project, cannot read A's private project.
+
+### RPC results, database side (2026-10-07)
+
+- `0003_rpc.sql`: `require_actor`, `create_project`, `update_project`, `commit_version` (service_role only; delta manifest, F6/F11 hash rule, quota on newly inserted blobs only, optimistic STALE_PARENT, copy freeze rules), `restore_version` (only versions in `main_history`), `make_copy`.
+- `0005_requests.sql`: `notify` (row + private `realtime.send`), `submit_request`, `resubmit_request`, `review_request(approve|request_changes|reject)`, `promote_copy` (STALE_COPY unless acknowledged), `mark_notifications_read` (keeps newest 100 read).
+- pgTAP: `rpc_projects.test.sql` 24 checks, `rpc_requests.test.sql` 22 checks (full two-account flow). **Total 85/85.**
+- Still missing: `takedown_blob` (B8), read functions (0006), the server actions (`app/actions/*`) and the R2 side of `commitVersion` (needs bucket credentials). The B5–B7 "done when" tests with two real supabase-js clients + live Broadcast delivery are not written yet.
 
 ---
 
