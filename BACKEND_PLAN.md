@@ -16,7 +16,7 @@
 | E3 | Manifest stored in the `versions` row as arrays; hashes are 32-byte `bytea`; identity IDs for internal tables | Roughly 3× smaller manifests; one-row version loads; `version_files` table removed |
 | E4 | `copies.state` + `copies.project_owner_id` | Copy RLS is three column checks, no subquery |
 | E5 | One SECURITY INVOKER read function per screen; keyset pagination; batched, hour-stable download URLs | Fewer round trips, browser cache hits, less egress |
-| E6 | `getClaims()` (local JWT verify) and a narrow middleware matcher | No Auth-server call per request |
+| E6 | `getClaims()` (local JWT verify) and a narrow `proxy.js` matcher (Next 16 renamed middleware to proxy) | No Auth-server call per request |
 | E7 | Notifications via Realtime Broadcast (`realtime.send`) | No per-subscriber RLS evaluation of `postgres_changes` |
 | E8 | No scheduled jobs | Nothing breaks while the free Supabase project is paused |
 
@@ -90,7 +90,7 @@ Rules:
 
 ### 4.1 Authentication (Supabase Auth)
 - Providers: email + password (confirmation on), Google, GitHub.
-- `@supabase/ssr` cookie sessions; `middleware.js` refreshes the session. Matcher excludes `_next/static`, `_next/image`, `favicon.ico`, and image files.
+- `@supabase/ssr` cookie sessions; `proxy.js` (Next 16 name for middleware) refreshes the session. Matcher excludes `_next/static`, `_next/image`, `favicon.ico`, and image files.
 - **Identify users with `supabase.auth.getClaims()`** with asymmetric JWT signing keys enabled: verified locally against cached JWKS, no Auth-server round trip. Never `getSession()` on the server.
 - Trigger on `auth.users` insert creates `profiles(id)` with `username = null`; onboarding calls `set_username`. Every write RPC requires a username.
 
@@ -146,7 +146,7 @@ Paste-into-editor text uses the same pipeline (UTF-8 bytes → hash → upload).
 Quota is charged to the user who registers a *new* blob; reuse is free.
 
 ### 4.4 Downloads (E5)
-- `getDownloadUrls(version_id)`: one RLS-checked read of the version's manifest joined to `blobs` (invisible version → nothing returned), skip/flag `blocked_at` blobs, presign all GETs locally.
+- `getDownloadUrls(version_id)`: read the version's manifest with the **user's** client (RLS: invisible version → nothing returned), then look up those hashes in `blobs` with the service role (clients have no SELECT on `blobs`), skip/flag `blocked_at` blobs, presign all GETs locally.
 - GETs are signed at the start of the current hour and valid 2 h, with `response-cache-control: private, max-age=3600, immutable`. The same file gets the same URL within the hour, so the browser caches it.
 - `response-content-disposition: attachment` for HTML, SVG and anything not allow-listed (stored-XSS guard).
 
@@ -228,6 +228,10 @@ No reverse index on file hashes: nothing in v1 queries "which versions contain h
 
 **Retention:** `mark_notifications_read` also deletes read notifications beyond the newest 100 for that user.
 
+**Main line timeline (B2 note):** promote is a pointer update (PRD: no file copying), so `projects.main_version_id` may point at a *copy's* version. The main-line history is therefore `main_history` (one row per save on main, restore and promote), **not** `versions where copy_id is null`. History screens page over `main_history`.
+
+**Enums (B2):** `license_type` = `cc_by | cc_by_sa | cc_by_nc | mit | all_rights_reserved`. CHECK constraints: manifest arrays equal length and ≤ 1000 entries, blob hash 32 bytes, `copies.published_at` set iff `state = published`, a user cannot copy their own project.
+
 ---
 
 ## 6. RPC functions
@@ -271,6 +275,7 @@ blobs:            false (only reached through read functions / server actions)
 review_requests:  owner_id = (select auth.uid()) or contributor_id = (select auth.uid())
 request_events:   caller can read the parent request
 main_history:     is_project_readable(project_id)
+realtime.messages: extension = 'broadcast' and realtime.topic() = 'user:' || auth.uid()   (private channel, E7)
 notifications:    user_id = (select auth.uid())
 ```
 
@@ -297,7 +302,7 @@ lib/
 app/actions/
   upload.js              prepareUpload, commitVersion, getDownloadUrls
   projects.js, copies.js, requests.js, notifications.js   (zod validation + RPC calls)
-middleware.js            session refresh (narrow matcher)
+proxy.js                 session refresh (narrow matcher; Next 16 name for middleware.js)
 docs/storage-upload-contract.md   shared by storage-dev and upload-dev
 ```
 
@@ -335,9 +340,19 @@ PRD Phase 3 criterion = B5 + B6 + B7 as one scripted test with two real supabase
 
 ---
 
+### B2 results (2026-10-07)
+
+- Migrations `0001_schema.sql` (all tables, enums, indexes) and `0002_rls.sql` (RLS on every table, writes revoked from `anon`/`authenticated`, default privileges revoked for future tables, `is_project_readable` / `is_copy_readable` helpers, `realtime.messages` policy for `user:<uid>`).
+- `supabase test db`: **39/39 pass** (12 auth + 27 schema/RLS).
+- `npm run check:rls` (real PostgREST, two real users): **14/14 pass**: B cannot insert into any of the 9 tables, cannot update or delete A's project, cannot read A's private project.
+
+---
+
 ## 10. Open questions
 
 1. **License options:** proposed CC BY, CC BY-SA, CC BY-NC, MIT (code), All rights reserved (copy disabled).
 2. **Quota numbers:** 25 MB/file, 500 MB/user are placeholders (10 GB R2 cap ≈ 20 users at full quota).
 3. **Withdraw a pending request?** Cheap to add (`withdraw_request`).
-4. **Account deletion:** recommended: keep content, anonymize the profile ("deleted user").
+4. **Account deletion:** recommended: keep content, anonymize the profile ("deleted user"). **Now required, not optional (B2):** hard-deleting a contributor whose copy was promoted fails, because `projects.main_version_id` would point at a cascaded-away version. Anonymize instead of delete.
+5. **Public → private switch (new):** if an owner makes a project private, contributors keep their copies but lose read access to the base main version. Proposal: `update_project` refuses public → private while unpromoted copies exist, or the UI warns. Needs the owner's call.
+6. **One copy per user per project?** Not constrained today; a user can make several copies. Add `unique (project_id, author_id)` if the UI expects one.

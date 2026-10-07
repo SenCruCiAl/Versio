@@ -10,7 +10,8 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "typecheck": "tsc -p jsconfig.json --noEmit",
-    "test": "node --test \"tests/**/*.test.mjs\""
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "check:rls": "node scripts/spike/rls-rest.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1141.0",

@@ -67,11 +67,17 @@ Carried decisions: PRD collaboration model (locked main, Make my copy, request t
 
 ---
 
-## Step 3: B2 schema and RLS (pending)
+## Step 3: B2 schema and RLS (done)
 
-**Owner:** main session.
-**Files:** `supabase/migrations/0001_schema.sql`, `0002_rls.sql`, `supabase/tests/*.sql` (pgTAP).
-**Done when:** with user B's JWT against PostgREST, B cannot write any table, cannot update A's project, and cannot read A's private project or private copy.
+| File | Who | Change |
+|---|---|---|
+| `supabase/migrations/0001_schema.sql` | main | enums (project_type, visibility, license_type, copy_state, request_status, request_event_kind); projects, copies, versions, blobs, review_requests, request_events, main_history, notifications; circular FKs added after `versions`; CHECKs (manifest lengths, ≤1000 files, 32-byte hash, published_at iff published, no copy of own project); all §5 indexes + one-open-request-per-copy unique index |
+| `supabase/migrations/0002_rls.sql` | main | RLS on all 9 tables; INSERT/UPDATE/DELETE/TRUNCATE revoked from anon/authenticated (and for future tables via default privileges); SELECT on blobs revoked; `is_project_readable` / `is_copy_readable` helpers; SELECT policies per §7; `realtime.messages` policy for private channel `user:<uid>` |
+| `supabase/tests/schema_rls.test.sql` | main | pgTAP, 27 checks |
+| `scripts/spike/rls-rest.mjs` (`npm run check:rls`) | main | same rules through real PostgREST with two real users; cleans up after itself |
+| `BACKEND_PLAN.md` | main | proxy.js naming, getDownloadUrls blob lookup via service role, main-line timeline = `main_history`, enum values, B2 results, open questions 4–6 |
+
+**Ran 2026-10-07:** `db:reset` clean; `db:test` **39/39**; `check:rls` **14/14**; `typecheck` clean; `npm test` 6/6.
 
 ---
 
